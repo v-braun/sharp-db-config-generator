@@ -7,26 +7,30 @@ By [v-braun - www.dev-things.net](http://www.dev-things.net).
 T4 based script that generates a C# configuration class from a Database Table.
 
 The following table:
-![table example](https://github.com/v-braun/sharp-db-config-generator/assets/master/media/db.jpg)
+
+![table example](https://cdn.rawgit.com/v-braun/sharp-db-config-generator/master/assets/db.jpg)
 
 Results in this C# Class:
 
 ```csharp
-namespace My.Default.Namespace {
+namespace My.Namespace {
 
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 
-	public class ApiConfiguration { 
+	public class WebAppConfiguration { 
 		public SecurityConfiguration Security { get; private set; }
 
 		#region constructor
-		public ApiConfiguration(DataTable data){ 
+		public WebAppConfiguration(DataTable data){ 
 			var config = TransformConfigTable(data);
 			this.Security = new SecurityConfiguration();
-			this.Security.LoggedUserSince = Get_DateTime(config, "Api.Security.LoggedUserSince");
+			this.Security.PasswordRetries = Get_int(config, "WebApp.Security.PasswordRetries");
+			this.Security.MinPasswordLength = Get_int(config, "WebApp.Security.MinPasswordLength");
+			this.Security.PasswordSalt2 = Get_string(config, "WebApp.Security.PasswordSalt2");
+			this.Security.MinUserBirthDate = Get_DateTime(config, "WebApp.Security.MinUserBirthDate");
  	
 		}
 		#endregion
@@ -100,7 +104,10 @@ using System.Linq;
  
 		#region config classes
 		public class SecurityConfiguration { 
-			public DateTime LoggedUserSince {get; set;}
+			public int PasswordRetries {get; set;}
+			public int MinPasswordLength {get; set;}
+			public string PasswordSalt2 {get; set;}
+			public DateTime MinUserBirthDate {get; set;}
 		
 		}
 
