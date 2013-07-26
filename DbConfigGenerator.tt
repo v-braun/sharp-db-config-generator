@@ -1,0 +1,237 @@
+<#@ template language="C#v3.5" hostspecific="True"#>
+<#@ assembly name="System.Data.dll" #>
+<#@include file="MultipleOutputHelper.ttinclude"#>
+<#@ import namespace="System.Data.SqlClient" #>
+<#@ import namespace="System" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ import namespace="System.Data" #>
+<#@ import namespace="System.Data.SqlClient" #>
+<#@ import namespace="System.Linq" #>
+<#
+  
+  // generates configuration classes form database tables
+  // see more: https://github.com/v-braun/sharp-db-config-generator
+  // made by: v_b
+
+
+  // parameters:  
+  const string DB_CONNECTION_STRING = @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=TestDb;Integrated Security=True";
+    const string DB_TABLE_NAME = "[dbo].[Configuration]";
+    const string CODE_DEFAULT_NAMESPACE = "My.Default.Namespace";
+  const string CODE_CLASS_POSTFIX = "Configuration";
+
+#><#
+  var manager = Manager.Create(Host, GenerationEnvironment); 
+
+    var configValues = ConfigurationTable.GetFromDB(DB_CONNECTION_STRING, DB_TABLE_NAME);
+    var apps = configValues.GroupBy(c => c.App);
+    foreach (var app in apps) {
+        var appName = app.Key;
+    var appClassName = appName + CODE_CLASS_POSTFIX;
+    manager.StartNewFile(appClassName + ".generated.cs");
+
+    var ns = app.First().GetAppNs();
+    if(ns != null) {
+#>namespace <#= ns #> {<#
+    }
+    else{
+#>namespace <#= CODE_DEFAULT_NAMESPACE #> {<#
+    }
+#>
+
+
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+
+  public class <#=appClassName #> { 
+<#
+        var groups = app.GroupBy(c => c.Group);
+
+        foreach (var group in groups) {
+            var groupName = group.Key;
+      var groupClassName = groupName + CODE_CLASS_POSTFIX;
+#>
+    public <#=groupClassName + " " + groupName#> { get; private set; }
+<#
+        }
+
+#>
+
+    #region constructor
+    public <#=appClassName #>(DataTable data){ 
+      var config = TransformConfigTable(data);
+<#
+        foreach (var group in groups) {
+            var groupName = group.Key;
+      var groupClassName = groupName + CODE_CLASS_POSTFIX;
+#>
+      this.<#=groupName #> = new <#=groupClassName #>();
+<#
+      foreach(var key in group){
+#>
+      this.<#=groupName #>.<#=key.Key#> = Get_<#=key.DataType #>(config, "<#= $"{appName}.{groupName}.{key.Key}" #>");
+<#
+      }
+#>
+<#
+        }
+    
+    
+#>  
+    }
+    #endregion
+<#
+
+#> 
+    #region methods
+
+        private IDictionary<string, string> TransformConfigTable(DataTable data) {
+            var result = new Dictionary<string, string>();
+            foreach (DataRow row in data.Rows) {
+                var app = row["App"] as string;
+                if (app != "WebApp")
+                    continue;
+
+                var group = row["Group"] as string;
+                var key = row["Key"] as string;
+                var value = row["Value"] as string;
+                var configKey = $"{app}.{group}.{key}";
+                if (value == null)
+                    throw new ConstraintException($"Config value at path: {configKey} is null, all values should be provided in the db");
+
+                result[configKey] = value;
+            }
+
+            return result;            
+        }
+
+        private string Get_string(IDictionary<string, string> data, string key) {
+            if (!data.ContainsKey(key))
+                throw new ConstraintException($"Config value at path: {key} does not exist");
+
+            return data[key];
+        }
+        private int Get_int(IDictionary<string, string> data, string key) {
+            var value = Get_string(data, key);
+            if (string.IsNullOrEmpty(value))
+                return default(int);
+
+            int result;
+            if (int.TryParse(value, out result))
+                return result;
+            else
+                throw new ConstraintException($"Config value: {value} at path: {key} cannot be converted in to an int");
+
+        }
+
+        private decimal Get_decimal(IDictionary<string, string> data, string key) {
+            var value = Get_string(data, key);
+            if (string.IsNullOrEmpty(value))
+                return default(int);
+
+            decimal result;
+            if (decimal.TryParse(value, out result))
+                return result;
+            else
+                throw new ConstraintException($"Config value: {value} at path: {key} cannot be converted in to an decimal");
+        }
+
+        private DateTime Get_DateTime(IDictionary<string, string> data, string key) {
+            var value = Get_string(data, key);
+            if (string.IsNullOrEmpty(value))
+                return DateTime.MinValue;
+
+            DateTime result;
+            if (DateTime.TryParse(value, out result))
+                return result;
+            else
+                throw new ConstraintException($"Config value: {value} at path: {key} cannot be converted in to a DateTime");
+
+        }
+    #endregion
+<#
+#> 
+    #region config classes
+<#
+        foreach (var group in groups) {
+            var groupName = group.Key;
+#>
+    public class <#=groupName + CODE_CLASS_POSTFIX #> { 
+<#
+      foreach(var key in group){
+        var keyName = key.Key;
+        var keyType = key.DataType;
+#>
+      public <#=keyType #> <#=keyName #> {get; set;}
+<#
+      }
+#>    
+    }
+
+<#
+        }#>
+    #endregion
+  }
+}<# 
+  }
+  manager.EndBlock(); 
+#><#
+  manager.Process(true); 
+#><#+
+public class ConfigurationTable {
+    public string App { get; set; }
+    public string Group { get; set; }
+    public string Key { get; set; }
+    public string DataType { get; set; }
+
+    public string GetAppNs() {
+        var lastDot = App.LastIndexOf(".", StringComparison.Ordinal);
+        if (lastDot < 0)
+            return null;
+
+        var ns = App.Substring(0, lastDot);
+        return ns;
+    }
+
+    public string GetAppClassName() {
+        var lastDot = App.LastIndexOf(".", StringComparison.Ordinal);
+        if (lastDot < 0)
+            return App;
+
+        var ns = App.Substring(0, lastDot);
+        var cls = App.Substring(lastDot + 1, App.Length - lastDot - 1);
+
+        return cls;
+    }
+
+    public static IEnumerable<ConfigurationTable> GetFromDB(string connectionString, string tableName) {
+        using (SqlConnection connection = new SqlConnection(connectionString)) {
+            connection.Open();
+            try {
+                using (SqlDataAdapter adapter = new SqlDataAdapter("select * from " + tableName, connection)) {
+                    using (var table = new DataTable()) {
+                        adapter.Fill(table);
+                        var dbValues = new List<ConfigurationTable>();
+                        foreach (DataRow row in table.Rows) {
+                            dbValues.Add(new ConfigurationTable {
+                                App = row["App"] as string,
+                                Group = row["Group"] as string,
+                                Key = row["Key"] as string,
+                                DataType = row["DataType"] as string,
+                            });
+                        }
+
+                        return dbValues;
+                    }
+                }
+
+            }
+            finally {
+                connection.Close();
+            }
+        }
+    }
+}
+#>
