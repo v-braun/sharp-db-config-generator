@@ -8,7 +8,7 @@ T4 based script that generates a C# configuration class from a Database Table.
 
 The following table:
 
-![table example](https://cdn.rawgit.com/v-braun/sharp-db-config-generator/master/assets/db.jpg)
+![table example](https://cdn.rawgit.com/v-braun/sharp-db-config-generator/4180e8b5e976329e3794e4f25091fe2d77c9ce84/assets/db.jpg)
 
 Results in this C# Class:
 
